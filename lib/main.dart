@@ -206,46 +206,7 @@ class TodoListPage extends StatelessWidget {
                       itemCount: appState.todos.length,
                       itemBuilder: (context, index) {
                         var todo = appState.todos[index];
-                        return Card(
-                          child: ListTile(
-                            leading: IconButton(
-                              icon: Icon(
-                                todo.isCompleted
-                                    ? Icons.check_circle
-                                    : Icons.circle,
-                                color: todo.isCompleted
-                                    ? Colors.green
-                                    : Colors.grey,
-                              ),
-                              onPressed: () {
-                                todo.isCompleted = !todo.isCompleted;
-                                appState.updateTodo(todo);
-                              },
-                            ),
-                            title: Text(todo.title),
-                            subtitle: Text(todo.description),
-                            trailing: IconButton(
-                              icon: Icon(Icons.edit),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    contentPadding: EdgeInsets.zero,
-                                    content: SizedBox(
-                                      width:
-                                          MediaQuery.of(context).size.width *
-                                          0.8,
-                                      height:
-                                          MediaQuery.of(context).size.height *
-                                          0.64,
-                                      child: TodoEditForm(todo: todo),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        );
+                        return TodoTile(todo: todo, appState: appState);
                       },
                     );
                   },
@@ -253,6 +214,49 @@ class TodoListPage extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class TodoTile extends StatelessWidget {
+  const TodoTile({super.key, required this.todo, required this.appState});
+
+  final Todo todo;
+  final MyAppState appState;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: IconButton(
+          icon: Icon(
+            todo.isCompleted ? Icons.check_circle : Icons.circle,
+            color: todo.isCompleted ? Colors.green : Colors.grey,
+          ),
+          onPressed: () {
+            todo.isCompleted = !todo.isCompleted;
+            appState.updateTodo(todo);
+          },
+        ),
+        title: Text(todo.title),
+        subtitle: Text(todo.description),
+        trailing: IconButton(
+          icon: Icon(Icons.edit),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                contentPadding: EdgeInsets.zero,
+                content: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  height: MediaQuery.of(context).size.height * 0.64,
+                  child: TodoEditForm(todo: todo),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -294,7 +298,10 @@ class _TodoCreateFormState extends State<TodoCreateForm> {
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Text('Create a new To-Do'),
+            child: Text(
+              'Create To-Do',
+              style: Theme.of(context).textTheme.displaySmall,
+            ),
           ),
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -334,15 +341,6 @@ class _TodoCreateFormState extends State<TodoCreateForm> {
                 );
               },
               child: Text('Create'),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: () {
-                appState.printTodos();
-              },
-              child: Text('Print Todos'),
             ),
           ),
         ],
@@ -387,12 +385,26 @@ class _TodoEditFormState extends State<TodoEditForm> {
 
   @override
   Widget build(BuildContext context) {
+    var deleteTheme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.red,
+        errorContainer: Colors.red.shade200,
+        onErrorContainer: Colors.white,
+      ),
+    );
+    var saveTheme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.green,
+        primaryContainer: Colors.green.shade200,
+        onPrimaryContainer: Colors.white,
+      ),
+    );
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Edit To-Do'),
-          // Receive the todo object being edited via ModalRoute
+          Text('Edit To-Do', style: Theme.of(context).textTheme.displaySmall),
           SizedBox(height: 16),
           SizedBox(
             width: 0.64 * MediaQuery.of(context).size.width,
@@ -402,7 +414,7 @@ class _TodoEditFormState extends State<TodoEditForm> {
                 border: OutlineInputBorder(),
               ),
               controller: titleController,
-              // autofocus: true,
+              autofocus: true,
               onSubmitted: (value) {
                 descFocusNode.requestFocus();
               },
@@ -423,23 +435,66 @@ class _TodoEditFormState extends State<TodoEditForm> {
               },
             ),
           ),
-          SizedBox(height: 16),
+          SizedBox(height: 32),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               SizedBox(
                 width: 0.16 * MediaQuery.of(context).size.width,
                 child: ElevatedButton(
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStateProperty.all(
+                      deleteTheme.colorScheme.errorContainer,
+                    ),
+                    overlayColor: WidgetStateProperty.all(
+                      deleteTheme.colorScheme.error,
+                    ),
+                    foregroundColor: WidgetStateProperty.resolveWith(
+                      (states) =>
+                          states.contains(WidgetState.hovered) ||
+                              states.contains(WidgetState.focused)
+                          ? deleteTheme.colorScheme.onErrorContainer
+                          : deleteTheme.colorScheme.error,
+                    ),
+                  ),
                   onPressed: () {
+                    var appState = context.read<MyAppState>();
+                    if (widget.todo != null) {
+                      appState.removeTodo(widget.todo!);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Center(
+                            child: Text(
+                              'To-Do "${widget.todo!.title}" deleted!',
+                            ),
+                          ),
+                        ),
+                      );
+                    }
                     Navigator.of(context).pop();
                   },
-                  child: Text('Cancel'),
+                  child: Text('Delete'),
                 ),
               ),
-              SizedBox(width: 16),
+              SizedBox(width: 32),
               SizedBox(
                 width: 0.16 * MediaQuery.of(context).size.width,
                 child: ElevatedButton(
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStateProperty.all(
+                      saveTheme.colorScheme.primaryContainer,
+                    ),
+                    overlayColor: WidgetStateProperty.all(
+                      saveTheme.colorScheme.primary,
+                    ),
+                    foregroundColor: WidgetStateProperty.resolveWith(
+                      (states) =>
+                          states.contains(WidgetState.hovered) ||
+                              states.contains(WidgetState.focused)
+                          ? saveTheme.colorScheme.onPrimaryContainer
+                          : saveTheme.colorScheme.primary,
+                    ),
+                  ),
                   focusNode: saveFocusNode,
                   onPressed: () {
                     var appState = context.read<MyAppState>();
