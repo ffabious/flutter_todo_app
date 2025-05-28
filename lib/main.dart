@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() {
@@ -37,7 +38,7 @@ class MyApp extends StatelessWidget {
 class Todo {
   final String title;
   final String description;
-  final bool isCompleted;
+  bool isCompleted;
 
   Todo({
     required this.title,
@@ -58,6 +59,8 @@ class _CompletePageState extends State<CompletePage> {
 
   @override
   Widget build(BuildContext context) {
+    var appState = context.watch<MyAppState>();
+    appState.syncTodos();
     Widget page;
     switch (selectedIndex) {
       case 0:
@@ -108,16 +111,63 @@ class _CompletePageState extends State<CompletePage> {
 class MyAppState extends ChangeNotifier {
   var todos = <Todo>[];
 
-  void addTodo(Todo todo) {
+  void syncTodos() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    var todoStrings = prefs.getStringList('todos') ?? [];
+    todos = todoStrings.map((todoString) {
+      var parts = todoString.split('|');
+      return Todo(
+        title: parts[0],
+        description: parts[1],
+        isCompleted: parts[2] == 'true',
+      );
+    }).toList();
+  }
+
+  void addTodo(Todo todo) async {
     if (!todos.any((t) => t.title == todo.title)) {
       todos.add(todo);
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      prefs.setStringList(
+        'todos',
+        todos
+            .map((t) => '${t.title}|${t.description}|${t.isCompleted}')
+            .toList(),
+      );
     }
     notifyListeners();
   }
 
   void removeTodo(Todo todo) {
-    if (todos.contains(todo)) {
-      todos.remove(todo);
+    if (todos.any((t) => t.title == todo.title)) {
+      todos.removeWhere((t) => t.title == todo.title);
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setStringList(
+          'todos',
+          todos
+              .map((t) => '${t.title}|${t.description}|${t.isCompleted}')
+              .toList(),
+        );
+      });
+    }
+    notifyListeners();
+  }
+
+  void updateTodo(Todo todo, {String prevTitle = ""}) {
+    if (prevTitle.isEmpty) {
+      prevTitle = todo.title;
+    }
+    if (todos.any((t) => t.title == prevTitle)) {
+      var index = todos.indexWhere((t) => t.title == prevTitle);
+      todos[index] = todo;
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setStringList(
+          'todos',
+          todos
+              .map((t) => '${t.title}|${t.description}|${t.isCompleted}')
+              .toList(),
+        );
+      });
     }
     notifyListeners();
   }
@@ -156,14 +206,44 @@ class TodoListPage extends StatelessWidget {
                       itemCount: appState.todos.length,
                       itemBuilder: (context, index) {
                         var todo = appState.todos[index];
-                        return ListTile(
-                          title: Text(todo.title),
-                          subtitle: Text(todo.description),
-                          trailing: IconButton(
-                            icon: Icon(Icons.delete),
-                            onPressed: () {
-                              appState.removeTodo(todo);
-                            },
+                        return Card(
+                          child: ListTile(
+                            leading: IconButton(
+                              icon: Icon(
+                                todo.isCompleted
+                                    ? Icons.check_circle
+                                    : Icons.circle,
+                                color: todo.isCompleted
+                                    ? Colors.green
+                                    : Colors.grey,
+                              ),
+                              onPressed: () {
+                                todo.isCompleted = !todo.isCompleted;
+                                appState.updateTodo(todo);
+                              },
+                            ),
+                            title: Text(todo.title),
+                            subtitle: Text(todo.description),
+                            trailing: IconButton(
+                              icon: Icon(Icons.edit),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    contentPadding: EdgeInsets.zero,
+                                    content: SizedBox(
+                                      width:
+                                          MediaQuery.of(context).size.width *
+                                          0.8,
+                                      height:
+                                          MediaQuery.of(context).size.height *
+                                          0.64,
+                                      child: TodoEditForm(todo: todo),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         );
                       },
@@ -264,6 +344,128 @@ class _TodoCreateFormState extends State<TodoCreateForm> {
               },
               child: Text('Print Todos'),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TodoEditForm extends StatefulWidget {
+  const TodoEditForm({super.key, this.todo});
+  final Todo? todo;
+
+  @override
+  State<TodoEditForm> createState() => _TodoEditFormState();
+}
+
+class _TodoEditFormState extends State<TodoEditForm> {
+  var titleController = TextEditingController();
+  var descriptionController = TextEditingController();
+  late FocusNode descFocusNode;
+  late FocusNode saveFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    descFocusNode = FocusNode();
+    saveFocusNode = FocusNode();
+    if (widget.todo != null) {
+      titleController.text = widget.todo!.title;
+      descriptionController.text = widget.todo!.description;
+    }
+  }
+
+  @override
+  void dispose() {
+    descFocusNode.dispose();
+    titleController.dispose();
+    saveFocusNode.dispose();
+    descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Edit To-Do'),
+          // Receive the todo object being edited via ModalRoute
+          SizedBox(height: 16),
+          SizedBox(
+            width: 0.64 * MediaQuery.of(context).size.width,
+            child: TextField(
+              decoration: InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
+              ),
+              controller: titleController,
+              // autofocus: true,
+              onSubmitted: (value) {
+                descFocusNode.requestFocus();
+              },
+            ),
+          ),
+          SizedBox(height: 16),
+          SizedBox(
+            width: 0.64 * MediaQuery.of(context).size.width,
+            child: TextField(
+              decoration: InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+              ),
+              controller: descriptionController,
+              focusNode: descFocusNode,
+              onSubmitted: (value) {
+                saveFocusNode.requestFocus();
+              },
+            ),
+          ),
+          SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 0.16 * MediaQuery.of(context).size.width,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('Cancel'),
+                ),
+              ),
+              SizedBox(width: 16),
+              SizedBox(
+                width: 0.16 * MediaQuery.of(context).size.width,
+                child: ElevatedButton(
+                  focusNode: saveFocusNode,
+                  onPressed: () {
+                    var appState = context.read<MyAppState>();
+                    appState.updateTodo(
+                      Todo(
+                        title: titleController.text,
+                        description: descriptionController.text,
+                        isCompleted: widget.todo?.isCompleted ?? false,
+                      ),
+                      prevTitle: widget.todo?.title ?? "",
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Center(
+                          child: Text(
+                            'To-Do "${titleController.text}" updated!',
+                          ),
+                        ),
+                      ),
+                    );
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('Save'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
