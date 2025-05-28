@@ -193,26 +193,21 @@ class TodoListPage extends StatelessWidget {
         color: theme.colorScheme.primaryContainer,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Expanded(
-                child: Consumer<MyAppState>(
-                  builder: (context, appState, child) {
-                    if (appState.todos.isEmpty) {
-                      return Center(child: Text('No To-Dos yet!'));
-                    }
-                    return ListView.builder(
-                      itemCount: appState.todos.length,
-                      itemBuilder: (context, index) {
-                        var todo = appState.todos[index];
-                        return TodoTile(todo: todo, appState: appState);
-                      },
-                    );
+          child: Expanded(
+            child: Consumer<MyAppState>(
+              builder: (context, appState, child) {
+                if (appState.todos.isEmpty) {
+                  return Center(child: Text('No To-Dos yet!'));
+                }
+                return ListView.builder(
+                  itemCount: appState.todos.length,
+                  itemBuilder: (context, index) {
+                    var todo = appState.todos[index];
+                    return TodoTile(todo: todo, appState: appState);
                   },
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
         ),
       ),
